@@ -28,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.faceguard.app.ui.theme.FaceGuardTheme
+import com.faceguard.app.ui.ProfileScreen
 import kotlinx.coroutines.launch
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ fun FaceGuardApp() {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Routes.HOME)       { HomeScreen() }
-            composable(Routes.PROFILES)   { ProfilesScreen(navController) }
+            composable(Routes.PROFILES)   { ProfileScreen(navController) }
             composable(Routes.ACTIVITY)   { ActivityScreen() }
             composable(Routes.SETTINGS)   { SettingsScreen() }
             composable(Routes.ADD_PERSON) {
