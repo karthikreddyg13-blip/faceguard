@@ -11,6 +11,7 @@ data class Profile(
     val relation: String,
     val isOwner: Boolean,
     val faceVector: ByteArray?,
+    val imagePath: String?,
     val createdAt: Long
 ) {
     override fun equals(other: Any?): Boolean {
@@ -27,6 +28,7 @@ data class Profile(
             if (other.faceVector == null) return false
             if (!faceVector.contentEquals(other.faceVector)) return false
         } else if (other.faceVector != null) return false
+        if (imagePath != other.imagePath) return false
         if (createdAt != other.createdAt) return false
 
         return true
@@ -38,6 +40,7 @@ data class Profile(
         result = 31 * result + relation.hashCode()
         result = 31 * result + isOwner.hashCode()
         result = 31 * result + (faceVector?.contentHashCode() ?: 0)
+        result = 31 * result + (imagePath?.hashCode() ?: 0)
         result = 31 * result + createdAt.hashCode()
         return result
     }

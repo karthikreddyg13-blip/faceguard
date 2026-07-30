@@ -41,7 +41,7 @@ class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() 
         }
     }
 
-    fun addProfile(name: String, relation: String, isOwner: Boolean, faceVector: ByteArray?) {
+    fun addProfile(name: String, relation: String, isOwner: Boolean, faceVector: ByteArray?, imagePath: String?) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
@@ -50,6 +50,7 @@ class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() 
                     relation = relation,
                     isOwner = isOwner,
                     faceVector = faceVector,
+                    imagePath = imagePath,
                     createdAt = System.currentTimeMillis()
                 )
                 repository.insertProfile(profile)
@@ -70,6 +71,20 @@ class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() 
                 _errorMessage.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to delete profile: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun updateProfile(profile: Profile) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                repository.updateProfile(profile)
+                _errorMessage.value = null
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to update profile: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
