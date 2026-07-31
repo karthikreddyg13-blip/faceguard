@@ -28,10 +28,8 @@ import com.faceguard.app.Routes
 import com.faceguard.app.viewmodel.ProfileViewModel
 import com.faceguard.data.database.FaceGuardDatabase
 import com.faceguard.data.database.Profile
+import com.faceguard.data.repository.ActivityLogRepository
 import com.faceguard.data.repository.ProfileRepository
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.face.FaceDetection
-import com.google.mlkit.vision.face.FaceDetectorOptions
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -53,13 +51,16 @@ fun ProfileScreen(navController: NavController) {
     val context = LocalContext.current
     val database = FaceGuardDatabase.getDatabase(context)
     val repository = ProfileRepository(database.profileDao())
+    val activityLogRepository = ActivityLogRepository(database.activityLogDao())
     val viewModel: ProfileViewModel = viewModel(
-        factory = ProfileViewModelFactory(repository)
+        factory = ProfileViewModelFactory(repository, activityLogRepository)
     )
 
     val profiles by viewModel.profiles.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val faceValidationError by viewModel.faceValidationError.collectAsState()
+    val developerMode by viewModel.developerMode.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var profileToDelete by remember { mutableStateOf<Profile?>(null) }
@@ -67,49 +68,16 @@ fun ProfileScreen(navController: NavController) {
     var profileToEnroll by remember { mutableStateOf<Profile?>(null) }
     var showCamera by remember { mutableStateOf(false) }
     var showEnrollOptions by remember { mutableStateOf(false) }
-    var faceValidationError by remember { mutableStateOf<String?>(null) }
 
     val galleryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             val imagePath = copyImageToAppStorage(context, uri)
-            
-            // Detect faces asynchronously
-            val image = InputImage.fromFilePath(context, uri)
-            val options = FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
-                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
-                .build()
-            val detector = FaceDetection.getClient(options)
-            
-            detector.process(image)
-                .addOnSuccessListener { faces ->
-                    when (faces.size) {
-                        0 -> {
-                            faceValidationError = "No face detected in the image"
-                            File(imagePath).delete()
-                        }
-                        1 -> {
-                            profileToEnroll?.let { profile ->
-                                val updatedProfile = profile.copy(imagePath = imagePath)
-                                viewModel.updateProfile(updatedProfile)
-                            }
-                            profileToEnroll = null
-                        }
-                        else -> {
-                            faceValidationError = "Multiple faces detected. Please use an image with exactly one face."
-                            File(imagePath).delete()
-                        }
-                    }
-                    detector.close()
-                }
-                .addOnFailureListener { e ->
-                    faceValidationError = "Failed to detect faces: ${e.message}"
-                    File(imagePath).delete()
-                    detector.close()
-                }
+            profileToEnroll?.let { profile ->
+                viewModel.validateAndEnrollFace(context, uri, imagePath, profile)
+            }
+            profileToEnroll = null
         }
     }
 
@@ -130,14 +98,33 @@ fun ProfileScreen(navController: NavController) {
                 Text("Profiles", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("MANAGE FACE PROFILES", color = TextMuted, fontSize = 10.sp, letterSpacing = 1.5.sp)
             }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(AccentGreen.copy(alpha = 0.15f))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-                    .clickable { showAddDialog = true }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("+ Add", color = AccentGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (developerMode) AccentPurple.copy(alpha = 0.15f) else DarkBorder)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .clickable { viewModel.toggleDeveloperMode() }
+                ) {
+                    Text(
+                        if (developerMode) "DEV ON" else "DEV OFF",
+                        color = if (developerMode) AccentPurple else TextMuted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AccentGreen.copy(alpha = 0.15f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .clickable { showAddDialog = true }
+                ) {
+                    Text("+ Add", color = AccentGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
@@ -199,12 +186,6 @@ fun ProfileScreen(navController: NavController) {
         errorMessage?.let { error ->
             LaunchedEffect(error) {
                 viewModel.clearError()
-            }
-        }
-
-        faceValidationError?.let { error ->
-            LaunchedEffect(error) {
-                // Error will be shown in dialog
             }
         }
     }
@@ -269,7 +250,7 @@ fun ProfileScreen(navController: NavController) {
         FaceValidationErrorDialog(
             error = error,
             onDismiss = {
-                faceValidationError = null
+                viewModel.clearFaceValidationError()
             }
         )
     }

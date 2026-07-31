@@ -27,8 +27,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.faceguard.app.ui.theme.FaceGuardTheme
 import com.faceguard.app.ui.ProfileScreen
+import com.faceguard.app.viewmodel.ActivityViewModel
+import com.faceguard.app.viewmodel.ActivityViewModelFactory
+import com.faceguard.app.FaceGuardDatabase as OldFaceGuardDatabase
+import com.faceguard.data.database.FaceGuardDatabase
+import com.faceguard.data.repository.ActivityLogRepository
+import com.faceguard.data.repository.ProfileRepository
 import kotlinx.coroutines.launch
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -201,7 +208,7 @@ fun HomeScreen() {
 
     LaunchedEffect(Unit) {
         while (true) {
-            profileCount = FaceGuardDatabase.getProfiles(context).size
+            profileCount = OldFaceGuardDatabase.getProfiles(context).size
             kotlinx.coroutines.delay(1000)
         }
     }
@@ -315,10 +322,10 @@ fun ProfilesScreen(navController: androidx.navigation.NavController) {
     // Load real profiles from SharedPreferences database
     LaunchedEffect(Unit) {
         while (true) {
-            profiles = FaceGuardDatabase.getProfiles(context)
+            profiles = OldFaceGuardDatabase.getProfiles(context)
             val rulesMap = mutableMapOf<Int, List<AppRule>>()
             profiles.forEach { profile ->
-                rulesMap[profile.id] = FaceGuardDatabase.getRulesForProfile(context, profile.id)
+                rulesMap[profile.id] = OldFaceGuardDatabase.getRulesForProfile(context, profile.id)
             }
             appRules = rulesMap
             kotlinx.coroutines.delay(500)
@@ -489,14 +496,15 @@ fun RealProfileCard(profile: Profile, appRules: List<AppRule>) {
 @Composable
 fun ActivityScreen() {
     val context = LocalContext.current
-    var logs by remember { mutableStateOf(FaceGuardDatabase.getLogs(context)) }
+    val database = FaceGuardDatabase.getDatabase(context)
+    val activityLogRepository = ActivityLogRepository(database.activityLogDao())
+    val profileRepository = ProfileRepository(database.profileDao())
+    val viewModel: ActivityViewModel = viewModel(
+        factory = ActivityViewModelFactory(activityLogRepository, profileRepository)
+    )
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            logs = FaceGuardDatabase.getLogs(context)
-            kotlinx.coroutines.delay(1000)
-        }
-    }
+    val activityLogs by viewModel.activityLogs.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize().background(DarkBg)
@@ -504,34 +512,47 @@ fun ActivityScreen() {
     ) {
         Text("Activity Log", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 4.dp))
-        Text("ALL UNLOCK ATTEMPTS", color = TextMuted, fontSize = 10.sp, letterSpacing = 1.5.sp,
+        Text("ALL ACTIVITY", color = TextMuted, fontSize = 10.sp, letterSpacing = 1.5.sp,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (logs.isEmpty()) {
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = AccentGreen)
+            }
+        } else if (activityLogs.isEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("📋", fontSize = 48.sp)
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("No activity yet", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("Unlock attempts will appear here", color = TextMuted, fontSize = 12.sp)
+                    Text("Activity will appear here", color = TextMuted, fontSize = 12.sp)
                 }
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(logs) { log ->
+                items(activityLogs) { logWithProfile ->
                     ActivityRow(ActivityItem(
-                        name = log.personName,
-                        tag = log.result,
+                        name = logWithProfile.profileName,
+                        tag = logWithProfile.activityLog.result,
                         time = android.text.format.DateUtils.getRelativeTimeSpanString(
-                            log.timestamp).toString(),
-                        dotColor = when (log.result) {
+                            logWithProfile.activityLog.timestamp).toString(),
+                        dotColor = when (logWithProfile.activityLog.result) {
+                            "Profile Added" -> AccentGreen
+                            "Profile Deleted" -> AccentRed
+                            "Face Enrolled" -> AccentBlue
                             "OWNER" -> AccentGreen
                             "KNOWN" -> AccentPurple
                             "STRANGER" -> AccentRed
                             else -> TextMuted
                         },
-                        tagColor = when (log.result) {
+                        tagColor = when (logWithProfile.activityLog.result) {
+                            "Profile Added" -> AccentGreen
+                            "Profile Deleted" -> AccentRed
+                            "Face Enrolled" -> AccentBlue
                             "OWNER" -> AccentGreen
                             "KNOWN" -> AccentPurple
                             "STRANGER" -> AccentRed
