@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Profile::class, AppRule::class, ActivityLog::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class FaceGuardDatabase : RoomDatabase() {
@@ -27,6 +27,13 @@ abstract class FaceGuardDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add profileName column to activity_logs table
+                database.execSQL("ALTER TABLE activity_logs ADD COLUMN profileName TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): FaceGuardDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -34,7 +41,7 @@ abstract class FaceGuardDatabase : RoomDatabase() {
                     FaceGuardDatabase::class.java,
                     "faceguard_database"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

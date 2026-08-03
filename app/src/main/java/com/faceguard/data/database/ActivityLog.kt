@@ -8,6 +8,7 @@ data class ActivityLog(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
     val profileId: Int?,
+    val profileName: String?,
     val timestamp: Long,
     val result: String,
     val intruderPhotoPath: String?

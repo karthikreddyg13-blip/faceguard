@@ -11,11 +11,13 @@ import com.faceguard.data.repository.ProfileRepository
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.google.mlkit.vision.face.Face
+import java.io.File
+import java.nio.ByteBuffer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 
 class ProfileViewModel(
     private val repository: ProfileRepository,
@@ -74,6 +76,7 @@ class ProfileViewModel(
                 
                 val activityLog = ActivityLog(
                     profileId = profileId.toInt(),
+                    profileName = name,
                     timestamp = System.currentTimeMillis(),
                     result = "Profile Added",
                     intruderPhotoPath = null
@@ -93,10 +96,13 @@ class ProfileViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
+                // Store profile name before deletion for activity log
+                val profileName = profile.name
                 repository.deleteProfile(profile)
                 
                 val activityLog = ActivityLog(
                     profileId = profile.id,
+                    profileName = profileName,
                     timestamp = System.currentTimeMillis(),
                     result = "Profile Deleted",
                     intruderPhotoPath = null
@@ -153,6 +159,7 @@ class ProfileViewModel(
                     
                     val activityLog = ActivityLog(
                         profileId = profile.id,
+                        profileName = profile.name,
                         timestamp = System.currentTimeMillis(),
                         result = "Face Enrolled",
                         intruderPhotoPath = null
@@ -163,10 +170,11 @@ class ProfileViewModel(
                 }
 
                 val image = InputImage.fromFilePath(context, uri)
+                // Use same detector options as FaceRecognitionManager for consistent face vector extraction
                 val options = FaceDetectorOptions.Builder()
                     .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-                    .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
-                    .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
+                    .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                    .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
                     .build()
                 val detector = FaceDetection.getClient(options)
 
@@ -179,12 +187,24 @@ class ProfileViewModel(
                                     File(imagePath).delete()
                                 }
                                 1 -> {
-                                    val updatedProfile = profile.copy(imagePath = imagePath)
+                                    // Extract face vector using the same structure as FaceRecognitionManager
+                                    val face = faces[0]
+                                    val faceVector = extractFaceVector(face)
+                                    
+                                    // Convert FloatArray to ByteArray for database storage
+                                    val faceVectorBytes = floatArrayToByteArray(faceVector)
+                                    
+                                    // Update profile with both image path and face vector
+                                    val updatedProfile = profile.copy(
+                                        imagePath = imagePath,
+                                        faceVector = faceVectorBytes
+                                    )
                                     updateProfile(updatedProfile)
                                     _faceValidationError.value = null
                                     
                                     val activityLog = ActivityLog(
                                         profileId = profile.id,
+                                        profileName = profile.name,
                                         timestamp = System.currentTimeMillis(),
                                         result = "Face Enrolled",
                                         intruderPhotoPath = null
@@ -209,5 +229,60 @@ class ProfileViewModel(
                 File(imagePath).delete()
             }
         }
+    }
+
+    /**
+     * Extracts a face vector from ML Kit Face detection results.
+     * 
+     * This method uses the same structure as FaceRecognitionManager.extractFaceVector()
+     * to ensure consistency between enrollment and recognition.
+     * 
+     * The vector includes:
+     * - Bounding box coordinates (center X, center Y, width, height)
+     * - Head Euler angles (X, Y, Z rotation)
+     * - Facial classification probabilities (smiling, left eye open, right eye open)
+     * 
+     * @param face The ML Kit Face object
+     * @return FloatArray representing the face feature vector
+     */
+    private fun extractFaceVector(face: Face): FloatArray {
+        val box = face.boundingBox
+        return floatArrayOf(
+            // Bounding box features
+            box.centerX().toFloat(),
+            box.centerY().toFloat(),
+            box.width().toFloat(),
+            box.height().toFloat(),
+            // Head pose angles
+            face.headEulerAngleX,
+            face.headEulerAngleY,
+            face.headEulerAngleZ,
+            // Classification probabilities
+            face.smilingProbability ?: 0f,
+            face.leftEyeOpenProbability ?: 0f,
+            face.rightEyeOpenProbability ?: 0f
+        )
+    }
+
+    /**
+     * Converts a FloatArray to ByteArray for database storage.
+     * 
+     * This method converts each float in the array to 4 bytes using ByteBuffer,
+     * resulting in a ByteArray that can be stored in the Room database.
+     * 
+     * The conversion process:
+     * 1. Allocate a ByteBuffer with capacity = floatArray.size * 4 bytes
+     * 2. Write each float to the buffer (4 bytes per float)
+     * 3. Convert buffer to ByteArray
+     * 
+     * @param floatArray The FloatArray to convert
+     * @return ByteArray representation of the float array
+     */
+    private fun floatArrayToByteArray(floatArray: FloatArray): ByteArray {
+        val byteBuffer = ByteBuffer.allocate(floatArray.size * 4)
+        for (value in floatArray) {
+            byteBuffer.putFloat(value)
+        }
+        return byteBuffer.array()
     }
 }

@@ -498,9 +498,8 @@ fun ActivityScreen() {
     val context = LocalContext.current
     val database = FaceGuardDatabase.getDatabase(context)
     val activityLogRepository = ActivityLogRepository(database.activityLogDao())
-    val profileRepository = ProfileRepository(database.profileDao())
     val viewModel: ActivityViewModel = viewModel(
-        factory = ActivityViewModelFactory(activityLogRepository, profileRepository)
+        factory = ActivityViewModelFactory(activityLogRepository)
     )
 
     val activityLogs by viewModel.activityLogs.collectAsState()
@@ -534,13 +533,13 @@ fun ActivityScreen() {
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(activityLogs) { logWithProfile ->
+                items(activityLogs) { log ->
                     ActivityRow(ActivityItem(
-                        name = logWithProfile.profileName,
-                        tag = logWithProfile.activityLog.result,
+                        name = log.profileName ?: "Unknown",
+                        tag = log.result,
                         time = android.text.format.DateUtils.getRelativeTimeSpanString(
-                            logWithProfile.activityLog.timestamp).toString(),
-                        dotColor = when (logWithProfile.activityLog.result) {
+                            log.timestamp).toString(),
+                        dotColor = when (log.result) {
                             "Profile Added" -> AccentGreen
                             "Profile Deleted" -> AccentRed
                             "Face Enrolled" -> AccentBlue
@@ -549,7 +548,7 @@ fun ActivityScreen() {
                             "STRANGER" -> AccentRed
                             else -> TextMuted
                         },
-                        tagColor = when (logWithProfile.activityLog.result) {
+                        tagColor = when (log.result) {
                             "Profile Added" -> AccentGreen
                             "Profile Deleted" -> AccentRed
                             "Face Enrolled" -> AccentBlue
