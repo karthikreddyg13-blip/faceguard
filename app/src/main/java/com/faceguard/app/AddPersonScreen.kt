@@ -278,35 +278,36 @@ fun AddPersonScreen(onBack: () -> Unit, onSaved: () -> Unit) {
 
                     scope.launch {
                         try {
-                            val profileId = FaceGuardDatabase.saveProfile(
-                                context,
-                                Profile(
-                                    name     = name.trim(),
-                                    relation = relation,
-                                    isOwner  = isOwner
-                                )
+                            val database = com.faceguard.data.database.FaceGuardDatabase.getDatabase(context)
+                            val profile = com.faceguard.data.database.Profile(
+                                name = name.trim(),
+                                relation = relation,
+                                isOwner = isOwner,
+                                faceVector = null,
+                                imagePath = null,
+                                createdAt = System.currentTimeMillis()
                             )
+                            val profileId = database.profileDao().insert(profile).toInt()
                             selectedApps.forEach { packageName ->
                                 val appName = commonApps
                                     .find { it.packageName == packageName }
                                     ?.appName ?: packageName
-                                FaceGuardDatabase.saveRule(
-                                    context,
-                                    AppRule(
-                                        profileId   = profileId,
-                                        packageName = packageName,
-                                        appName     = appName
-                                    )
+                                val rule = com.faceguard.data.database.AppRule(
+                                    profileId = profileId,
+                                    packageName = packageName,
+                                    appName = appName,
+                                    isAllowed = true
                                 )
+                                database.appRuleDao().insert(rule)
                             }
-                            FaceGuardDatabase.saveLog(
-                                context,
-                                ActivityLog(
-                                    profileId  = profileId,
-                                    personName = name.trim(),
-                                    result     = "ENROLLED"
-                                )
+                            val log = com.faceguard.data.database.ActivityLog(
+                                profileId = profileId,
+                                profileName = name.trim(),
+                                timestamp = System.currentTimeMillis(),
+                                result = "Profile created",
+                                intruderPhotoPath = null
                             )
+                            database.activityLogDao().insert(log)
                             isSaving = false
                             onSaved()
                         } catch (e: Exception) {

@@ -9,5 +9,6 @@ data class AppRule(
     val id: Int = 0,
     val profileId: Int,
     val packageName: String,
-    val shouldHide: Boolean
+    val appName: String,
+    val isAllowed: Boolean
 )

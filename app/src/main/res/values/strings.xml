@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">FaceGuard</string>
+    <string name="accessibility_service_description">FaceGuard App Enforcement Service - Monitors app launches and enforces profile-based app rules</string>
 </resources>

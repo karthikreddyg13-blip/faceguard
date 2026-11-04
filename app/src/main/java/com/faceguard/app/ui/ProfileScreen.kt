@@ -25,6 +25,7 @@ import androidx.navigation.NavController
 import androidx.compose.ui.draw.clip
 import coil.compose.AsyncImage
 import com.faceguard.app.Routes
+import com.faceguard.app.ui.ProfileAppPermissionsScreen
 import com.faceguard.app.viewmodel.ProfileViewModel
 import com.faceguard.data.database.FaceGuardDatabase
 import com.faceguard.data.database.Profile
@@ -68,6 +69,7 @@ fun ProfileScreen(navController: NavController) {
     var profileToEnroll by remember { mutableStateOf<Profile?>(null) }
     var showCamera by remember { mutableStateOf(false) }
     var showEnrollOptions by remember { mutableStateOf(false) }
+    var profileForAppPermissions by remember { mutableStateOf<Profile?>(null) }
 
     val galleryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -177,6 +179,9 @@ fun ProfileScreen(navController: NavController) {
                         onEnrollFace = {
                             profileToEnroll = profile
                             showEnrollOptions = true
+                        },
+                        onAppPermissions = {
+                            profileForAppPermissions = profile
                         }
                     )
                 }
@@ -216,8 +221,9 @@ fun ProfileScreen(navController: NavController) {
         CameraScreen(
             onPhotoCaptured = { imagePath ->
                 profileToEnroll?.let { profile ->
-                    val updatedProfile = profile.copy(imagePath = imagePath)
-                    viewModel.updateProfile(updatedProfile)
+                    // Convert file path to URI for consistency with gallery flow
+                    val imageUri = android.net.Uri.fromFile(java.io.File(imagePath))
+                    viewModel.validateAndEnrollFace(context, imageUri, imagePath, profile)
                 }
                 showCamera = false
                 profileToEnroll = null
@@ -225,6 +231,15 @@ fun ProfileScreen(navController: NavController) {
             onDismiss = {
                 showCamera = false
                 profileToEnroll = null
+            }
+        )
+    }
+
+    if (profileForAppPermissions != null) {
+        ProfileAppPermissionsScreen(
+            profile = profileForAppPermissions!!,
+            onBack = {
+                profileForAppPermissions = null
             }
         )
     }
@@ -257,7 +272,7 @@ fun ProfileScreen(navController: NavController) {
 }
 
 @Composable
-fun ProfileCard(profile: Profile, onDelete: () -> Unit, onEnrollFace: () -> Unit) {
+fun ProfileCard(profile: Profile, onDelete: () -> Unit, onEnrollFace: () -> Unit, onAppPermissions: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -320,6 +335,22 @@ fun ProfileCard(profile: Profile, onDelete: () -> Unit, onEnrollFace: () -> Unit
                     Text(
                         "Enroll Face",
                         color = AccentGreen,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(AccentBlue.copy(alpha = 0.15f))
+                        .clickable { onAppPermissions() }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "App Rules",
+                        color = AccentBlue,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )

@@ -3,6 +3,7 @@ package com.faceguard.app.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner as ComposeLocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,11 +33,12 @@ fun CameraScreen(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = ComposeLocalLifecycleOwner.current
     
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var preview by remember { mutableStateOf<Preview?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -46,8 +49,56 @@ fun CameraScreen(
     }
 
     LaunchedEffect(Unit) {
-        val provider = ProcessCameraProvider.getInstance(context).get()
-        cameraProvider = provider
+        Log.d("CameraScreen", "Starting camera initialization...")
+        try {
+            val provider = ProcessCameraProvider.getInstance(context).get()
+            cameraProvider = provider
+            Log.d("CameraScreen", "Camera provider initialized successfully")
+        } catch (e: Exception) {
+            Log.e("CameraScreen", "Failed to initialize camera provider", e)
+        }
+    }
+
+    // Bind camera when both provider and previewView are ready
+    LaunchedEffect(cameraProvider, previewView) {
+        if (cameraProvider != null && previewView != null) {
+            Log.d("CameraScreen", "Both provider and previewView ready, binding camera")
+            try {
+                preview?.let {
+                    Log.d("CameraScreen", "Unbinding previous preview")
+                    cameraProvider!!.unbindAll()
+                }
+
+                Log.d("CameraScreen", "Building Preview use case")
+                preview = Preview.Builder()
+                    .build()
+                    .also {
+                        Log.d("CameraScreen", "Setting surface provider")
+                        it.setSurfaceProvider(previewView!!.surfaceProvider)
+                    }
+
+                Log.d("CameraScreen", "Building ImageCapture use case")
+                imageCapture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+
+                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+                Log.d("CameraScreen", "Using front camera selector")
+
+                Log.d("CameraScreen", "Unbinding all use cases before binding")
+                cameraProvider!!.unbindAll()
+                Log.d("CameraScreen", "Binding camera to lifecycle")
+                cameraProvider!!.bindToLifecycle(
+                    lifecycleOwner,
+                    cameraSelector,
+                    preview,
+                    imageCapture
+                )
+                Log.d("CameraScreen", "Camera bound successfully")
+            } catch (e: Exception) {
+                Log.e("CameraScreen", "Failed to bind camera to lifecycle", e)
+            }
+        }
     }
 
     if (!hasCameraPermission) {
@@ -67,42 +118,15 @@ fun CameraScreen(
     ) {
         AndroidView(
             factory = { ctx ->
+                Log.d("CameraScreen", "Creating PreviewView")
                 PreviewView(ctx).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER
+                }.also {
+                    previewView = it
                 }
             },
             modifier = Modifier.fillMaxSize()
-        ) { previewView ->
-            cameraProvider?.let { provider ->
-                preview?.let {
-                    provider.unbindAll()
-                }
-
-                preview = Preview.Builder()
-                    .build()
-                    .also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-
-                imageCapture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .build()
-
-                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-
-                try {
-                    provider.unbindAll()
-                    provider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageCapture
-                    )
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
+        )
 
         Column(
             modifier = Modifier
@@ -127,14 +151,19 @@ fun CameraScreen(
                 ) {
                     Button(
                         onClick = {
+                            Log.d("CameraScreen", "Capture button pressed, imageCapture: ${imageCapture != null}")
                             imageCapture?.let { capture ->
+                                Log.d("CameraScreen", "Starting photo capture")
                                 capturePhoto(
                                     context = context,
                                     imageCapture = capture,
                                     onPhotoCaptured = { path ->
+                                        Log.d("CameraScreen", "Photo captured successfully: $path")
                                         onPhotoCaptured(path)
                                     }
                                 )
+                            } ?: run {
+                                Log.e("CameraScreen", "ImageCapture is null, cannot capture photo")
                             }
                         },
                         modifier = Modifier
@@ -208,7 +237,9 @@ private fun capturePhoto(
     imageCapture: ImageCapture,
     onPhotoCaptured: (String) -> Unit
 ) {
+    Log.d("CameraScreen", "capturePhoto called")
     val photoFile = createImageFile(context)
+    Log.d("CameraScreen", "Photo file created: ${photoFile.absolutePath}")
     val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
     imageCapture.takePicture(
@@ -216,11 +247,12 @@ private fun capturePhoto(
         ContextCompat.getMainExecutor(context),
         object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                Log.d("CameraScreen", "Image saved successfully to: ${photoFile.absolutePath}")
                 onPhotoCaptured(photoFile.absolutePath)
             }
 
             override fun onError(exception: ImageCaptureException) {
-                exception.printStackTrace()
+                Log.e("CameraScreen", "Failed to save image", exception)
             }
         }
     )

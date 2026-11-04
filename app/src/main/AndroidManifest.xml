@@ -2,14 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
-        tools:ignore="ProtectedPermission" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:allowBackup="true"
@@ -31,33 +28,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- Background service -->
-        <service
-            android:name=".FaceGuardService"
-            android:enabled="true"
+        
+        <activity
+            android:name="com.faceguard.app.BlockScreenActivity"
             android:exported="false"
-            android:foregroundServiceType="camera" />
-
-        <!-- Lock screen detector -->
-        <receiver
-            android:name=".LockScreenReceiver"
-            android:enabled="true"
-            android:exported="false">
+            android:theme="@style/Theme.FaceGuard"
+            android:launchMode="singleTop" />
+        
+        <service
+            android:name="com.faceguard.service.AppEnforcementService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
-                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
-        </receiver>
-        <!-- Secret dialer code *#5678# -->
-        <receiver android:name=".SecretCodeReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name=
-                    "android.provider.Telephony.SECRET_CODE" />
-                <data android:scheme="android_secret_code"
-                    android:host="5678" />
-            </intent-filter>
-        </receiver>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
     </application>
 
 </manifest>

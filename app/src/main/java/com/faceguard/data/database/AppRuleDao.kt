@@ -31,6 +31,9 @@ interface AppRuleDao {
     @Query("SELECT * FROM app_rules WHERE packageName = :packageName")
     suspend fun getByPackageName(packageName: String): AppRule?
 
+    @Query("SELECT * FROM app_rules WHERE profileId = :profileId AND packageName = :packageName")
+    fun getByProfileIdAndPackageName(profileId: Int, packageName: String): Flow<AppRule?>
+
     @Query("DELETE FROM app_rules WHERE profileId = :profileId")
     suspend fun deleteByProfileId(profileId: Int)
 
